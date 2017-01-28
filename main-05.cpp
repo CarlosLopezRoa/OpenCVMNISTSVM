@@ -32,74 +32,8 @@ bool liveTesting = true;
 
 
 Mat detectAndDisplay( Mat frame );
+void createData( Mat& allData, Mat& allClasses, Mat& trainData, Mat& trainClasses, Mat&testData, Mat& testClasses, Ptr<TrainData>& trainingInData, int K, double ratio);
 String window_name = "Capture - MNIST";
-
-
-/** @function detectAndDisplay */
-Mat detectAndDisplay( Mat frame )
-{
-    Mat frame_gray;
-    Mat src;
-
-    cvtColor( frame, frame_gray, COLOR_BGR2GRAY );
-    equalizeHist( frame_gray, frame_gray );
-
-    src = frame_gray.clone();
-    Mat imgGaussian;
-    GaussianBlur(src, imgGaussian, Size(3,3), 1.0);
-
-    Mat img;
-    img = imgGaussian.clone();
-
-    threshold(img,img, 20,255,CV_THRESH_BINARY_INV);
-
-    imshow( window_name, img );
-    return img;
-}
-
-void createData( Mat& allData, Mat& allClasses, Mat& trainData, Mat& trainClasses, Mat&testData, Mat& testClasses, Ptr<TrainData>& trainingInData, int K, double ratio)
-{
-    int layout = ROW_SAMPLE;
-    int NSamples = allData.rows;
-    int maxSamples = NSamples/K;
-    int numSamples = maxSamples*ratio;
-
-    int indexClass = 0;
-    int numClass = 0;
-    int trainIndex = 0;
-
-    for (int i=0; i<NSamples; i++)
-    {
-      if (indexClass==numSamples)
-      {
-              numClass++;
-              indexClass = 0;
-              for (int k=0; k<(maxSamples-numSamples); k++)
-              {
-                 Mat tmp = allData.row(i++)+0;
-                 testData.push_back(tmp.reshape(1,1) );
-                 testClasses.push_back(allClasses.at<int32_t>(0,i));
-              }
-      }
-
-       if (i<NSamples)
-       {
-          Mat tmp = allData.row(i)+0;
-          trainData.push_back(tmp.reshape(1,1) );
-          trainClasses.push_back(allClasses.at<int32_t>(0,i));
-          indexClass++;
-       }
-    }
-
-    trainingInData=TrainData::create(trainData, ROW_SAMPLE, trainClasses  );
-
-    layout = trainingInData->getLayout();
-    NSamples = trainingInData->getNSamples();
-    maxSamples = NSamples/K;
-    numSamples = maxSamples*ratio;
-
-}
-
 
 /** @function main */
 int main( int argc, char** argv )
@@ -117,7 +51,6 @@ int main( int argc, char** argv )
      Mat testData;
      Mat testClasses;
      Ptr<TrainData> trainingInData;
-
 
     if (activedTesting){
 
@@ -141,7 +74,6 @@ int main( int argc, char** argv )
         allData.push_back(floatImg.reshape(1,1) );
         digValue = digit;
         allClasses.push_back(int32_t (digValue));
-
 
         indexCell++;
         indexDigits++;
@@ -175,7 +107,6 @@ int main( int argc, char** argv )
     cout << "Starting training process" << endl;
     cout << "ROW_SAMPLE: "<< ROW_SAMPLE << endl;
     svm->train(trainingInData);
-    ///svm->train(trainData, ROW_SAMPLE, trainClasses );
     cout << "Finished training process" << endl;
     svm->save("svmOCR_01.dat");
     C.end();
@@ -223,12 +154,14 @@ int main( int argc, char** argv )
         captured = detectAndDisplay( frame );
         Size size(20,20);
         resize(captured,captured,size);
+        equalizeHist( captured, captured );
+        imshow("Resize",captured);
         Mat floatImg;
         captured.convertTo(floatImg, CV_32F);
         Mat allData;
         allData.push_back(floatImg.reshape(1,1) );
         Mat tmp = allData.row(0)+0;
-        imshow("new",tmp);
+        imshow("Reshape",tmp);
 
         float response = svm->predict(tmp);
         cout<<"Prediction "<< response << endl;
@@ -241,4 +174,70 @@ int main( int argc, char** argv )
       return 0;
 }
 
+/** @function detectAndDisplay */
+Mat detectAndDisplay( Mat frame )
+{
+    Mat frame_gray;
+    Mat src;
+//imshow( "Color", frame );
+    cvtColor( frame, frame_gray, COLOR_BGR2GRAY );
+//imshow( "Grayscale", frame_gray );
+    equalizeHist( frame_gray, frame_gray );
+//imshow( "Equalized", frame_gray );
 
+    src = frame_gray.clone();
+    Mat imgGaussian;
+    GaussianBlur(src, imgGaussian, Size(3,3), 1.0);
+//imshow( "Filtered", imgGaussian );
+
+    Mat img;
+    img = imgGaussian.clone();
+
+    threshold(img,img, 20,255,CV_THRESH_BINARY_INV);
+//imshow( "Threshold", img );
+    imshow( window_name, img );
+    return img;
+}
+
+void createData( Mat& allData, Mat& allClasses, Mat& trainData, Mat& trainClasses, Mat&testData, Mat& testClasses, Ptr<TrainData>& trainingInData, int K, double ratio)
+{
+    int layout = ROW_SAMPLE;
+    int NSamples = allData.rows;
+    int maxSamples = NSamples/K;
+    int numSamples = maxSamples*ratio;
+
+    int indexClass = 0;
+    int numClass = 0;
+    int trainIndex = 0;
+
+    for (int i=0; i<NSamples; i++)
+    {
+      if (indexClass==numSamples)
+      {
+              numClass++;
+              indexClass = 0;
+              for (int k=0; k<(maxSamples-numSamples); k++)
+              {
+                 Mat tmp = allData.row(i++)+0;
+                 testData.push_back(tmp.reshape(1,1) );
+                 testClasses.push_back(allClasses.at<int32_t>(0,i));
+              }
+      }
+
+       if (i<NSamples)
+       {
+          Mat tmp = allData.row(i)+0;
+          trainData.push_back(tmp.reshape(1,1) );
+          trainClasses.push_back(allClasses.at<int32_t>(0,i));
+          indexClass++;
+       }
+    }
+
+    trainingInData=TrainData::create(trainData, ROW_SAMPLE, trainClasses  );
+
+    layout = trainingInData->getLayout();
+    NSamples = trainingInData->getNSamples();
+    maxSamples = NSamples/K;
+    numSamples = maxSamples*ratio;
+
+}
