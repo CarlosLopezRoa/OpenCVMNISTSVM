@@ -1,0 +1,347 @@
+
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/ml/ml.hpp>
+#include <iostream>
+
+/*
+The same program OCR_KNearest cleaned by all debug statements...
+with a unique function in charge to divide accordingly the
+trainData and testData
+
+void createData( Mat& allData, Mat& allClasses, Mat&testData, Mat& testClasses, Ptr<TrainData>& trainingInData, int K, double ratio)
+{
+
+On the basis of the size of allData and allClasses ( both they have the same size!!)
+I verify that the size of generalData divide by numDataForFeature gives a integer number
+( in this way all classes have the same number of elements)
+the variable ratio identifies the number of trains with respect to the tests
+
+createData(  Ptr<TrainData> trainingInData,  Ptr<TrainData> trainingOutData, ratio)
+On the basis of the number of classes elements the functions knows the constant elements belong at
+each class. Then only a fraction of these elements are used by the new create Data
+
+
+*/
+
+
+using namespace std;
+using namespace cv;
+using namespace cv::ml;
+
+bool debugP = true;   // debug Program
+bool debugV = false;   //debug Visual
+
+
+//This solution copies locally all the samples and classes becauze no other solutions has been
+//found in the previous tests ( man01, main02, main03 )
+
+void createData( Mat& allData, Mat& allClasses, Mat&testData, Mat& testClasses, Ptr<TrainData>& trainingInData, int K, double ratio)
+{
+    int layout = ROW_SAMPLE;
+    int NSamples = allData.rows;
+    int maxSamples = NSamples/K;
+    int numSamples = maxSamples*ratio;
+
+    if (debugP)
+    {
+     cout<<" Inside createData() " << endl << endl;
+     cout<<"layout: " << layout << endl;
+     cout<<"NSamples: " << NSamples << endl;
+     cout<<"K: " << K << endl;
+     cout<<"maxSamples: " <<maxSamples << endl;
+     cout<<"numSamples: " <<numSamples << endl;
+    }
+
+    Mat allTrainData;
+    Mat allTrainClasses;
+
+    int indexClass = 0;
+    int numClass = 0;
+    int trainIndex = 0;
+
+    for (int i=0; i<NSamples; i++)  //main loop
+    {
+      //for each class read the specified number of Samples and class values
+      if (indexClass==numSamples)
+      {
+              numClass++;
+              indexClass = 0;
+              for (int k=0; k<(maxSamples-numSamples); k++)
+              {
+                 Mat tmp = allData.row(i++)+0;   //+0 explanation see row() operator in OpenCV manual
+                 testData.push_back(tmp.reshape(1,1) );
+                 testClasses.push_back(allClasses.at<float>(0,i));
+
+              }
+      }
+
+       if (i<NSamples)
+       {
+           Mat tmp = allData.row(i)+0;   //+0 explanation see row() operator in OpenCV manual
+          // cout<<" tmp: " << endl << tmp << endl;
+          allTrainData.push_back(tmp.reshape(1,1) );
+          allTrainClasses.push_back(allClasses.at<float>(0,i));
+          indexClass++;
+       }
+    }
+
+     trainingInData=TrainData::create(allTrainData, ROW_SAMPLE, allTrainClasses);
+
+    layout = trainingInData->getLayout();
+    NSamples = trainingInData->getNSamples();
+    maxSamples = NSamples/K;
+    numSamples = maxSamples*ratio;
+
+    if (debugP)
+    {
+     cout<<" after training()... " << endl << endl;
+     cout<<"allTrainData size: " << allTrainData.size() << endl;
+     cout<<"allTrainClasses size: " << allTrainClasses.size() << endl;
+
+     cout<<"testData size: " << testData.size() << endl;
+     cout<<"testClasses size: " << testClasses.size() << endl;
+
+     cout<<"layout: " << layout << endl;
+     cout<<"NSamples: " << NSamples << endl;
+     cout<<"NTraining: " <<  trainingInData->getNTrainSamples() << endl;
+     cout<<"K: " << K << endl;
+     cout<<"maxSamples: " <<maxSamples << endl;
+     cout<<"numSamples: " <<numSamples << endl;
+
+    }
+}
+
+
+
+
+
+int main( int argc, char** argv )
+{
+    int size = 20;
+
+     //Create train and test data and classes
+     int overallSamples = 5000;
+     int numTests = 2500;
+     int numTrainSamples = 250;
+     Mat allData;
+     Mat allClasses;
+
+
+    //load the image and transform it into gray scale image
+     Mat img = imread("digits.png", CV_LOAD_IMAGE_GRAYSCALE);
+
+    //Now we split the image to 5000 cells, each 20x20 size
+    //image size 2000 x 1000 therefore  100 images for row and 500 images for digits
+    // Reading and processing all possible small images
+
+    int indexCell = 0; //indexCell is the unique index between 0 to 5000 images
+    int indexDigits = 0; //index concerning the digits from 0 to 500
+    int digit = 0;       //digit
+
+    Mat cell, tmp;
+    for (int j=0; j< img.rows; j+=size)   // rows
+     {
+      for (int i=0; i< img.cols; i+=size) // cols
+       {
+        //data
+        //ROI of 20x20 pixels
+        Mat tmp = img(Rect(i,j,size,size) );
+        Mat floatImg;
+        tmp.convertTo(floatImg, CV_32F);
+
+       if (debugP) cout<<"indexCell: " << indexCell <<" indexDigits: " << indexDigits << "  " << " digit: " << digit << "  (x,y)= "<< i<<"x"<<j << endl;
+
+        allData.push_back(floatImg.reshape(1,1) );
+        allClasses.push_back(float(digit));
+
+
+        indexCell++;
+        indexDigits++;
+        if (indexDigits==500)
+        {
+              digit++;
+              indexDigits =0;
+        }
+
+        //visualization:
+         if (debugV)
+         {
+            string cellTitle = format("digit %d   cell(%d) %dx%d", digit, indexCell, i, j);
+            namedWindow(cellTitle, CV_WINDOW_KEEPRATIO);
+            imshow(cellTitle,tmp );
+            waitKey(200);
+            destroyWindow(cellTitle);
+         }
+       }
+     }
+
+
+
+    cout<<"loaded all data ok!!!" << endl;
+
+
+    //------------------------ 2. Set up the support vector machines parameters --------------------
+    //------------------------ 3. Train the svm ----------------------------------------------------
+    cout << "svm creation..." << endl;
+
+    Mat testData;
+    Mat testClasses;
+    Ptr<TrainData> trainingInData;
+
+    double allRatio = 0.1;  // 0.7 means 70% Training and 30% Test
+    //It is a little bit slowly with respect to the direct approach...
+    createData(allData, allClasses, testData, testClasses, trainingInData, 10, allRatio);
+
+    Ptr<SVM> svm = SVM::create();
+    svm->setType(SVM::C_SVC);  //C_SVC
+    svm->setC(0.2);
+    svm->setKernel(SVM::LINEAR);  //SVM::LINEAR
+    svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER, (int)1e7, 1e-6));
+
+    //training data
+    cout << "Starting training process" << endl;
+    cout << "ROW_SAMPLE: "<< ROW_SAMPLE << endl;
+    svm->train(trainingInData);  //In this case we use Ptr<TrainData>
+    cout << "Finished training process" << endl;
+
+    //------------------------ 4. Show the decision regions ----------------------------------------
+    //! [show]
+   // Data for visual representation
+    const int WIDTH = 512, HEIGHT = 512;
+    Mat I = Mat::zeros(HEIGHT, WIDTH, CV_8UC3);
+
+    Vec3b green(0,100,0), blue (100,0,0);
+    for (int i = 0; i < I.rows; ++i)
+        for (int j = 0; j < I.cols; ++j)
+        {
+            Mat sampleMat = (Mat_<float>(1,2) << i, j);
+            float response = svm->predict(sampleMat);
+
+            if      (response == 1)    I.at<Vec3b>(j, i)  = green;
+            else if (response == 2)    I.at<Vec3b>(j, i)  = blue;
+        }
+
+    //test data
+//    svm->findNearest(testData,knnClassifier->getDefaultK(),results);
+    //! [show]
+
+
+
+    //----------------------- 5. Show the training data ------------------------------------------
+
+    //! [show_data]
+    int thick = -1;
+    int lineType = 8;
+    float px, py;
+    // Class 1
+    NTRAINING_SAMPLES
+    for (int i = 0; i < NTRAINING_SAMPLES; ++i)
+    {
+        px = trainData.at<float>(i,0);
+        py = trainData.at<float>(i,1);
+        circle(I, Point( (int) px,  (int) py ), 3, Scalar(0, 255, 0), thick, lineType);
+    }
+    // Class 2
+    for (int i = NTRAINING_SAMPLES; i <2*NTRAINING_SAMPLES; ++i)
+    {
+        px = trainData.at<float>(i,0);
+        py = trainData.at<float>(i,1);
+        circle(I, Point( (int) px, (int) py ), 3, Scalar(255, 0, 0), thick, lineType);
+    }
+    //! [show_data]
+
+    //------------------------- 6. Show support vectors --------------------------------------------
+    //! [show_vectors]
+    thick = 2;
+    lineType  = 8;
+    Mat sv = svm->getSupportVectors();
+
+    cout<<"Number of Support Vectors: "<< sv << endl;
+
+    for (int i = 0; i < sv.rows; ++i)
+    {
+        const float* v = sv.ptr<float>(i);
+        circle(	I,  Point( (int) v[0], (int) v[1]), 6, Scalar(128, 128, 128), thick, lineType);
+    }
+    //! [show_vectors]
+
+    imwrite("result.png", I);	                   // save the Image
+    imshow("SVM for Non-Linear Training Data", I); // show it to the user
+    waitKey(0);
+}
+
+
+
+
+/*
+    int K= 5;
+    Mat results, response,dist;
+    Ptr<TrainData> trainingInData;
+
+    double allRatio = 0.1;  // 0.7 means 70% Training and 30% Test
+    //It is a little bit slowly with respect to the direct approach...
+    createData(allData, allClasses, testData, testClasses, trainingInData, 10, allRatio);
+
+
+    Ptr<KNearest> knnClassifier = KNearest::create();
+    knnClassifier->setIsClassifier(true);
+    knnClassifier->setAlgorithmType(KNearest::BRUTE_FORCE);  //BRUTE_FORCE KD_TREE COMPRESSED
+    knnClassifier->setDefaultK(1);
+
+    //training data
+    knnClassifier->train(trainingInData);  //In this case we use Ptr<TrainData>
+
+    //test data
+    knnClassifier->findNearest(testData,knnClassifier->getDefaultK(),results);
+
+    //Just checking the settings
+    cout<<"Training data: "<<endl
+    <<"getNSamples\t"<<trainingInData->getNSamples()<<endl
+    //<<"getSamples\n"<<trainingData->getSamples()<<endl   //
+    <<endl;
+
+    cout<<"Classifier :"<<endl
+    <<"kclassifier->getDefaultK(): "<<knnClassifier->getDefaultK()<<endl
+    <<"kclassifier->getIsClassifier(): "<<knnClassifier->getIsClassifier()<<endl
+    <<"kclassifier->getAlgorithmType(): "<<knnClassifier->getAlgorithmType()<<endl
+    <<endl;
+
+    //Now we check the accuracy of classification:
+    //For this scope compare the result with test_labels and check which are wrong
+
+     //if (debugP) cout<<"results: "<<results << endl;
+     //if (debugP) cout<<"response: "<<response << endl;
+
+
+
+     //compared results
+     int cmpRes = 0;
+     for (int k=0; k<(overallSamples-numTests); k++)
+     {
+         if (results.at<float>(0,k) ==  testClasses.at<float>(0,k) ) cmpRes++;
+     }
+     cout<< " K: "<< K << endl;
+     cout<<" correct matches: " << cmpRes << endl;
+     cout<<" accuracy: " << (cmpRes*100.0/2500.0) << endl;
+
+
+
+
+    cout<< endl;
+    cout<< endl<< endl;
+
+    cout<<"expected results: " << endl;
+    cout<< " K: "<< 5 << endl;
+    cout<< " accuracy 91% " << endl;
+    cout << endl << endl;
+
+    cout<<"end of program " << endl;
+    return 0;
+}
+
+*/
+
+
